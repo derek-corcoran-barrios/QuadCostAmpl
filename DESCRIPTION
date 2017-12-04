@@ -10,7 +10,7 @@ Maintainer: Derek Corcoran <derek.corcoran.barrios@gmail.com>
 Description: it transforms timeslices of species distribution models into
     data for ampl modeling, and the results of the ampl model back to raster
     files
-Imports: dplyr, gdistance, igraph, magrittr, Matrix, raster, tidyr
+Imports: animation, dplyr, gdistance, igraph, magrittr, Matrix, raster, tidyr
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
