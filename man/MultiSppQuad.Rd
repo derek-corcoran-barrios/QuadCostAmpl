@@ -30,7 +30,7 @@ of a species distribution model into a time slice
 \dontrun{
 data("BinSpp")
 data("Cost")
-MultiSppQuad(Stacklist = BinSpp, Dist = 1000000, name = "Two", costlayer = Cost)
+MultiSppQuad(Stacklist = BinSpp, Dist = 1000000, name = "Two", costlayer = Cost, nchains = 8)
 }
 }
 \author{

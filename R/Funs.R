@@ -14,7 +14,7 @@
 #' \dontrun{
 #' data("BinSpp")
 #' data("Cost")
-#' MultiSppQuad(Stacklist = BinSpp, Dist = 1000000, name = "Two", costlayer = Cost)
+#' MultiSppQuad(Stacklist = BinSpp, Dist = 1000000, name = "Two", costlayer = Cost, nchains = 8)
 #' }
 #' @importFrom dplyr filter
 #' @importFrom dplyr group_by
@@ -30,9 +30,11 @@
 #' @importFrom magrittr "%>%"
 #' @importFrom Matrix cBind
 #' @importFrom Matrix rBind
+#' @importFrom raster cellFromXY
 #' @importFrom raster ncell
 #' @importFrom raster nlayers
 #' @importFrom raster values
+#' @importFrom raster "values<-"
 #' @importFrom raster xyFromCell
 #' @importFrom tidyr unite_
 #' @author Derek Corcoran <derek.corcoran.barrios@gmail.com>
@@ -134,7 +136,7 @@ MultiSppQuad <- function(Stacklist, Dist, name, nchains = 100, costlayer){
   connections <- do.call("rbind", connections)
 
   Nchains <- data.frame(Spp = Spps, Nchains = nchains, Space = "\n")
-  Cost <- values(costlayer)[unique(unique(connections$to), unique(connections$to))]
+  Cost <- data.frame(ID = paste0("[",unique(unique(connections$to), unique(connections$to)),"]"), cost = values(costlayer)[unique(unique(connections$to), unique(connections$to))])
 
 
   sink(paste0(name, ".dat"))
@@ -143,9 +145,10 @@ MultiSppQuad <- function(Stacklist, Dist, name, nchains = 100, costlayer){
   cat("\n")
   cat(c("set SP :=", names(Stacklist), ";"))
   cat("\n")
+  cat("param c :=")
   cat("\n")
-  cat(c("set c :=", Cost, ";"))
-  cat("\n")
+  cat(do.call(paste, Cost))
+  cat(";")
   cat("\n")
   cat(c("set E :=", paste0("(",unique(unite_(connections, col = "V", sep = ",", from = c("from", "to"))$V), ")"), ";"))
   cat("\n")
@@ -165,4 +168,100 @@ MultiSppQuad <- function(Stacklist, Dist, name, nchains = 100, costlayer){
   cat("\n")
   sink()
   return(list(connections = connections, Suitability = Suitability))
+}
+
+#' Imports the AMPL result back to R
+#'
+#' From the result gotten from the AMPL model, it will develop a stack with the
+#' index for each species, and a data frame with the results
+#' @param Stacklist The original stacklist used in function MultiSppQuad
+#' @param AmplFile The path to the file given by the AMPL model
+#' @param plot logical, wether to plot or not the stack, defaults to TRUE
+#' @return a list with a stack with a stack with the
+#' index for each species, and a data frame with the results
+#' @examples
+#' \dontrun{
+#' #Load the data
+#' data("BinSpp")
+#' #Use the function with the
+#' Index <- GetQuadIndex(Stacklist = BinSpp, AmplFile = "https://raw.githubusercontent.com/derek-corcoran-barrios/QuadraticCostScripts/master/Two.txt")
+#' }
+#' @importFrom dplyr filter
+#' @importFrom raster "values<-"
+#' @importFrom raster stack
+#' @author Derek Corcoran <derek.corcoran.barrios@gmail.com>
+#' @export
+
+
+GetQuadIndex <- function(Stacklist, AmplFile, plot = TRUE){
+  DT <- read.table(AmplFile, quote="\"", comment.char="")
+  colnames(DT) <- c("Species", "CellID", "Index")
+  temp <- Stacklist[[1]][[1]]
+  SPP <- as.character(unique(DT[,"Species"]))
+  Stack <- list()
+  for(i in 1:length(SPP)){
+    values(temp)<- NA
+    DF <- filter(DT, Species == SPP[i])
+    values(temp)[DF[,"CellID"]] <- DF[,"Index"]
+    Stack[[i]] <- temp
+  }
+  Stack <- do.call("stack", Stack)
+  names(Stack) <- SPP
+  if(plot == TRUE){
+    plot(Stack)
+  }
+  return(list(Stack = Stack, DF = DT))
+}
+
+
+#' Imports the AMPL result back to R to get the timeslice flow
+#'
+#' From the result gotten from the AMPL model, it will develop a stack with the
+#' flow for each species on each time slice, and a data frame with the results
+#' @param Stacklist The original stacklist used in function MultiSppQuad
+#' @param AmplFile The path to the file given by the AMPL model
+#' @param Species an interger number of the species to be ploted, the
+#' data frame is made for all the species
+#' @param plot logical, wether to plot or not the stack, defaults to TRUE
+#' @param gif logical, wether to make a gif or not the stack, defaults to FALSE
+#' @return a list with a stack with a stack with the
+#' index for each species, and a data frame with the results
+#' @examples
+#' \dontrun{
+#' #Load the data
+#' data("BinSpp")
+#' #Use the function with the
+#' Index <- GetQuadFlow(Stacklist = BinSpp, AmplFile = "https://raw.githubusercontent.com/derek-corcoran-barrios/QuadraticCostScripts/master/TwoY.txt", Species = 1, plot = FALSE, gif = TRUE)
+#' }
+#' @importFrom animation saveGIF
+#' @importFrom dplyr filter
+#' @importFrom raster "values<-"
+#' @importFrom raster stack
+#' @author Derek Corcoran <derek.corcoran.barrios@gmail.com>
+#' @export
+
+
+GetQuadFlow <- function(Stacklist, AmplFile, Species, plot = TRUE, gif = FALSE){
+  DT <- read.table(AmplFile, quote="\"", comment.char="")
+  colnames(DT) <- c("Species", "CellID", "Time", "Index")
+  temp <- Stacklist[[1]][[1]]
+  SPP <- as.character(unique(DT[,"Species"]))
+  Times <- unique(DT[,"Time"])
+  Stack <- list()
+  DF <- filter(DT, Species == SPP[Species])
+  for(i in 1:length(Times)){
+    values(temp)<- NA
+    D <- filter(DF, Time == Times[i])
+    values(temp)[D[,"CellID"]] <- D[,"Index"]
+    Stack[[i]] <- temp
+  }
+  Stack <- do.call("stack", Stack)
+  names(Stack) <- Times
+  if(plot == TRUE){
+    plot(Stack)
+  }
+  if(gif == TRUE){
+    saveGIF(for(i in 1:length(Times)){plot(Stack[[i]], main = paste("Time", Times[i]))})
+  }
+  return(list(Stack = Stack, DF = DT))
 }
